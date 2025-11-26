@@ -39,10 +39,12 @@ const App: React.FC = () => {
   const [showRecitationModal, setShowRecitationModal] = useState<boolean>(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingMimeTypeRef = useRef<string>('audio/webm');
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const activeAyahRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const autoPlayRef = useRef<boolean>(false);
 
   // Memorization Progress Calculation
   const memorizationProgress = useMemo(() => {
@@ -96,15 +98,24 @@ const App: React.FC = () => {
       }
   }, [activeAyahIndex]);
 
-  // Cleanup audio & Stop audio when changing Ayahs to prevent ghost playback
+  // Handle Audio Stop/Play when changing Ayahs
   useEffect(() => {
-    stopAudio();
+    if (autoPlayRef.current) {
+        toggleAudio();
+        autoPlayRef.current = false;
+    } else {
+        stopAudio();
+    }
+    
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-  }, [activeAyahIndex, selectedSurah, activeReciter]); // Added activeAyahIndex to dependency to stop audio when switching manually
+    
+    return () => stopAudio();
+  }, [activeAyahIndex, selectedSurah, activeReciter]);
 
   const stopAudio = () => {
       if (audioPlayerRef.current) {
           audioPlayerRef.current.pause();
+          audioPlayerRef.current.currentTime = 0;
           audioPlayerRef.current = null;
       }
       setIsPlayingAudio(false);
@@ -127,6 +138,7 @@ const App: React.FC = () => {
 
     if (isPlayingAudio) {
         stopAudio();
+        autoPlayRef.current = false;
     } else {
         const ayahNumber = surahData.ayahs[activeAyahIndex].number;
         const audioUrl = getAyahAudioUrl(activeReciter.id, ayahNumber);
@@ -143,13 +155,10 @@ const App: React.FC = () => {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
             
             // Auto-advance logic
-            // Note: Since we have a useEffect on [activeAyahIndex] that stops audio, 
-            // we need to be careful. The useEffect stops *active* audio.
-            // If we change index, audio stops. That's fine.
-            // But we want to play the NEXT one automatically? 
-            // For now, let's keep it simple and just stop. Auto-play needs a more complex state manager
-            // to bypass the cleanup effect or a ref to track intention.
-            // Leaving as-is (stop at end) to ensure bug-free experience.
+            if (activeAyahIndex < (surahData?.ayahs.length || 0) - 1) {
+                autoPlayRef.current = true;
+                setActiveAyahIndex(prev => prev + 1);
+            }
         };
 
         player.onerror = (e) => {
@@ -174,6 +183,7 @@ const App: React.FC = () => {
     setAiInsight(null);
     setRecitationResults({});
     stopAudio();
+    autoPlayRef.current = false;
     
     const data = await getSurahDetails(surah.number);
     setSurahData(data);
@@ -234,8 +244,9 @@ const App: React.FC = () => {
       if (MediaRecorder.isTypeSupported('audio/webm')) {
         mimeType = 'audio/webm';
       } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        mimeType = 'audio/mp4'; // Safari fallback often
+        mimeType = 'audio/mp4'; 
       }
+      recordingMimeTypeRef.current = mimeType;
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
@@ -278,7 +289,11 @@ const App: React.FC = () => {
         reader.onloadend = async () => {
             const base64Audio = (reader.result as string).split(',')[1];
             const currentAyahObj = surahData.ayahs[activeAyahIndex];
-            const result = await validateRecitation(currentAyahObj.text, base64Audio);
+            const result = await validateRecitation(
+                currentAyahObj.text, 
+                base64Audio, 
+                recordingMimeTypeRef.current
+            );
             
             setRecitationResults(prev => ({ ...prev, [currentAyahObj.number]: result }));
             setLevel(MemorizationLevel.FULL_TEXT);
