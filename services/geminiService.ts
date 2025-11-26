@@ -1,13 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AISummary, RecitationResult } from '../types';
 
-// Initialize Gemini using process.env.API_KEY as per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 export const generateVerseInsight = async (surahName: string, ayahs: string[]): Promise<AISummary> => {
   if (!process.env.API_KEY) {
     return {
-      tafseer: "يرجى إضافة مفتاح API (API_KEY) لتفعيل المساعد الذكي.",
+      tafseer: "يرجى إضافة مفتاح API لتفعيل المساعد الذكي.",
       keywords: [],
       connection: ""
     };
@@ -59,7 +59,7 @@ export const generateVerseInsight = async (surahName: string, ayahs: string[]): 
 export const generateQuiz = async (ayahText: string): Promise<{ question: string; options: string[]; answer: number }> => {
     if (!process.env.API_KEY) {
         return {
-            question: "الرجاء تفعيل API_KEY",
+            question: "الرجاء تفعيل API Key",
             options: ["", "", "", ""],
             answer: 0
         };
@@ -85,15 +85,6 @@ export const generateQuiz = async (ayahText: string): Promise<{ question: string
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
-                responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    answer: { type: Type.INTEGER }
-                  },
-                  required: ["question", "options", "answer"]
-                }
             }
         });
         
@@ -115,7 +106,7 @@ export const validateRecitation = async (ayahText: string, audioBase64: string):
         return {
             isCorrect: false,
             score: 0,
-            feedback: "يرجى تفعيل API_KEY",
+            feedback: "يرجى تفعيل API Key",
             mistakes: []
         };
     }
@@ -160,8 +151,7 @@ export const validateRecitation = async (ayahText: string, audioBase64: string):
                         score: { type: Type.INTEGER },
                         feedback: { type: Type.STRING },
                         mistakes: { type: Type.ARRAY, items: { type: Type.STRING } }
-                    },
-                    required: ["isCorrect", "score", "feedback", "mistakes"]
+                    }
                 }
             }
         });
