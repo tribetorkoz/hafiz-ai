@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AISummary, RecitationResult } from '../types';
 
-// Initialize Gemini with env variable as per strict guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// استخدم المفتاح مباشرة
+const ai = new GoogleGenAI({ apiKey: 'REDACTED_BY_FILTER_REPO' });
 
 export const generateVerseInsight = async (surahName: string, ayahs: string[]): Promise<AISummary> => {
   const prompt = `
@@ -85,7 +85,7 @@ export const generateQuiz = async (ayahText: string): Promise<{ question: string
   }
 }
 
-export const validateRecitation = async (ayahText: string, audioBase64: string, mimeType: string = "audio/webm"): Promise<RecitationResult> => {
+export const validateRecitation = async (ayahText: string, audioBase64: string): Promise<RecitationResult> => {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -93,7 +93,7 @@ export const validateRecitation = async (ayahText: string, audioBase64: string, 
         parts: [
           {
             inlineData: {
-              mimeType: mimeType, 
+              mimeType: "audio/wav", 
               data: audioBase64
             }
           },
