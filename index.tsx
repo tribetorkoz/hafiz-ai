@@ -7,7 +7,7 @@ function App() {
 
   async function askAI() {
     const client = new GoogleGenerativeAI({
-      apiKey: "YOUR_API_KEY"
+      apiKey: "REDACTED_BY_FILTER_REPO"
     });
 
     const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
