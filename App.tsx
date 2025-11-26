@@ -67,12 +67,25 @@ const App: React.FC = () => {
     fetchSurahs();
   }, []);
 
+  // Normalization for Arabic Search
+  const normalizeArabic = (text: string) => {
+    return text
+      .replace(/[\u064B-\u065F]/g, '') // Remove tashkeel
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي');
+  };
+
   // Filter logic
   useEffect(() => {
     if (searchTerm === '') {
         setFilteredSurahs(surahs);
     } else {
-        setFilteredSurahs(surahs.filter(s => s.name.includes(searchTerm) || s.englishName.toLowerCase().includes(searchTerm.toLowerCase())));
+        const normalizedSearch = normalizeArabic(searchTerm.toLowerCase());
+        setFilteredSurahs(surahs.filter(s => 
+            normalizeArabic(s.name).includes(normalizedSearch) || 
+            s.englishName.toLowerCase().includes(normalizedSearch)
+        ));
     }
   }, [searchTerm, surahs]);
 
@@ -83,13 +96,11 @@ const App: React.FC = () => {
       }
   }, [activeAyahIndex]);
 
-  // Cleanup audio
+  // Cleanup audio & Stop audio when changing Ayahs to prevent ghost playback
   useEffect(() => {
-      return () => {
-          stopAudio();
-          if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      };
-  }, [selectedSurah, activeReciter]);
+    stopAudio();
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+  }, [activeAyahIndex, selectedSurah, activeReciter]); // Added activeAyahIndex to dependency to stop audio when switching manually
 
   const stopAudio = () => {
       if (audioPlayerRef.current) {
@@ -130,7 +141,15 @@ const App: React.FC = () => {
             setIsPlayingAudio(false);
             setAudioProgress(100);
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-            // Optional: Auto-play next could go here
+            
+            // Auto-advance logic
+            // Note: Since we have a useEffect on [activeAyahIndex] that stops audio, 
+            // we need to be careful. The useEffect stops *active* audio.
+            // If we change index, audio stops. That's fine.
+            // But we want to play the NEXT one automatically? 
+            // For now, let's keep it simple and just stop. Auto-play needs a more complex state manager
+            // to bypass the cleanup effect or a ref to track intention.
+            // Leaving as-is (stop at end) to ensure bug-free experience.
         };
 
         player.onerror = (e) => {
@@ -207,8 +226,18 @@ const App: React.FC = () => {
       if (isPlayingAudio) stopAudio();
 
       setLevel(MemorizationLevel.HIDDEN);
+      // Request audio
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      // Determine mimeType (safely)
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/webm';
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4'; // Safari fallback often
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -217,7 +246,7 @@ const App: React.FC = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' }); 
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType }); 
         stream.getTracks().forEach(track => track.stop());
         await processRecitation(audioBlob);
       };
@@ -225,6 +254,7 @@ const App: React.FC = () => {
       mediaRecorder.start();
       setIsRecording(true);
     } catch (err) {
+      console.error(err);
       alert("يرجى السماح باستخدام الميكروفون.");
     }
   };

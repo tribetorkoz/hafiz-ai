@@ -53,8 +53,12 @@ const AyahCard: React.FC<AyahCardProps> = ({ ayah, level, isActive, onClick, onA
     if (level === MemorizationLevel.HIDDEN) {
        return (
          <div className="flex flex-wrap gap-x-3 gap-y-6 justify-center w-full py-4" dir="rtl">
-           {words.map((_, i) => (
-             <span key={i} className={`h-12 rounded-xl transition-all duration-500 border border-white/5 ${isRecording ? 'bg-red-500/10 animate-pulse border-red-500/20' : 'bg-slate-800/40'}`} style={{ width: `${Math.random() * 40 + 60}px` }}></span>
+           {words.map((word, i) => (
+             <span 
+                key={i} 
+                className={`h-12 rounded-xl transition-all duration-500 border border-white/5 ${isRecording ? 'bg-red-500/10 animate-pulse border-red-500/20' : 'bg-slate-800/40'}`} 
+                style={{ width: `${Math.max(60, word.length * 15 + 20)}px` }}
+             ></span>
            ))}
          </div>
        );

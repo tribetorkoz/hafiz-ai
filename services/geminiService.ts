@@ -1,10 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AISummary, RecitationResult } from '../types';
 
-// استخدم المفتاح مباشرة
-const ai = new GoogleGenAI({ apiKey: 'REDACTED_BY_FILTER_REPO' });
+// Initialize Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 export const generateVerseInsight = async (surahName: string, ayahs: string[]): Promise<AISummary> => {
+  if (!process.env.API_KEY) {
+    return {
+      tafseer: "يرجى إضافة مفتاح API لتفعيل المساعد الذكي.",
+      keywords: [],
+      connection: ""
+    };
+  }
+
   const prompt = `
     أنت معلم قرآن خبير ومتميز.
     السورة: ${surahName}
@@ -49,100 +57,117 @@ export const generateVerseInsight = async (surahName: string, ayahs: string[]): 
 };
 
 export const generateQuiz = async (ayahText: string): Promise<{ question: string; options: string[]; answer: number }> => {
-  const prompt = `
-    النص القرآني: ${ayahText}
-    
-    قم بإنشاء سؤال "أكمل الآية" أو سؤال حول كلمة معينة في الآية لاختبار الحفظ.
-    يجب أن يكون السؤال دقيقاً وصعباً قليلاً للمتقن.
-    
-    الرد JSON فقط:
-    {
-      "question": "نص السؤال",
-      "options": ["خيار1", "خيار2", "خيار3", "خيار4"],
-      "answer": index_of_correct_answer (0-3)
+    if (!process.env.API_KEY) {
+        return {
+            question: "الرجاء تفعيل API Key",
+            options: ["", "", "", ""],
+            answer: 0
+        };
     }
-  `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
+    const prompt = `
+      النص القرآني: ${ayahText}
+      
+      قم بإنشاء سؤال "أكمل الآية" أو سؤال حول كلمة معينة في الآية لاختبار الحفظ.
+      يجب أن يكون السؤال دقيقاً وصعباً قليلاً للمتقن.
+      
+      الرد JSON فقط:
+      {
+        "question": "نص السؤال",
+        "options": ["خيار1", "خيار2", "خيار3", "خيار4"],
+        "answer": index_of_correct_answer (0-3)
       }
-    });
-    
-    const text = response.text;
-    if (!text) throw new Error("No text");
-    return JSON.parse(text);
-  } catch (e) {
-    console.error(e);
-    return {
-      question: "حدث خطأ أثناء توليد السؤال",
-      options: ["-", "-", "-", "-"],
-      answer: 0
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+            }
+        });
+        
+        const text = response.text;
+        if (!text) throw new Error("No text");
+        return JSON.parse(text);
+    } catch (e) {
+        console.error(e);
+        return {
+             question: "حدث خطأ أثناء توليد السؤال",
+             options: ["-", "-", "-", "-"],
+             answer: 0
+        }
     }
-  }
 }
 
 export const validateRecitation = async (ayahText: string, audioBase64: string): Promise<RecitationResult> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: "audio/wav", 
-              data: audioBase64
+    if (!process.env.API_KEY) {
+        return {
+            isCorrect: false,
+            score: 0,
+            feedback: "يرجى تفعيل API Key",
+            mistakes: []
+        };
+    }
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: {
+                parts: [
+                    {
+                        inlineData: {
+                            // Ensure this matches the blob type created in App.tsx (usually audio/webm for MediaRecorder)
+                            mimeType: "audio/webm", 
+                            data: audioBase64
+                        }
+                    },
+                    {
+                        text: `
+                        Act as a Quran Recitation Teacher.
+                        Target Ayah Text: "${ayahText}"
+                        
+                        Task: Listen to the audio and compare it strictly to the Target Ayah Text.
+                        Ignore minor Tajweed rules (like Ghunnah/Qalqalah levels) unless they change the meaning.
+                        Focus heavily on: Missing words, Added words, Wrong vowels (Harakat) that change meaning, or completely wrong words.
+
+                        Return a JSON object:
+                        {
+                          "isCorrect": boolean (true if the recitation is generally correct, false if major mistakes),
+                          "score": number (0-100),
+                          "feedback": string (Arabic text. Specific correction. E.g., "أحسنت" or "انتبه، نسيت كلمة 'العالمين'"),
+                          "mistakes": string[] (Array of specific words from the Target Text that were missed or read wrong. IMPORTANT: Return the word exactly as written in the Target Text so I can highlight it.)
+                        }
+                        `
+                    }
+                ]
+            },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        isCorrect: { type: Type.BOOLEAN },
+                        score: { type: Type.INTEGER },
+                        feedback: { type: Type.STRING },
+                        mistakes: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    }
+                }
             }
-          },
-          {
-            text: `
-            Act as a Quran Recitation Teacher.
-            Target Ayah Text: "${ayahText}"
-            
-            Task: Listen to the audio and compare it strictly to the Target Ayah Text.
-            Ignore minor Tajweed rules (like Ghunnah/Qalqalah levels) unless they change the meaning.
-            Focus heavily on: Missing words, Added words, Wrong vowels (Harakat) that change meaning, or completely wrong words.
+        });
 
-            Return a JSON object:
-            {
-              "isCorrect": boolean (true if the recitation is generally correct, false if major mistakes),
-              "score": number (0-100),
-              "feedback": string (Arabic text. Specific correction. E.g., "أحسنت" or "انتبه، نسيت كلمة 'العالمين'"),
-              "mistakes": string[] (Array of specific words from the Target Text that were missed or read wrong. IMPORTANT: Return the word exactly as written in the Target Text so I can highlight it.)
-            }
-            `
-          }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isCorrect: { type: Type.BOOLEAN },
-            score: { type: Type.INTEGER },
-            feedback: { type: Type.STRING },
-            mistakes: { type: Type.ARRAY, items: { type: Type.STRING } }
-          }
-        }
-      }
-    });
+        const text = response.text;
+        if (!text) throw new Error("No response from AI");
+        return JSON.parse(text) as RecitationResult;
 
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
-    return JSON.parse(text) as RecitationResult;
-
-  } catch (error) {
-    console.error("Recitation Error:", error);
-    return {
-      isCorrect: false,
-      score: 0,
-      feedback: "حدث خطأ في تحليل الصوت، حاول مرة أخرى بصوت أوضح.",
-      mistakes: []
-    };
-  }
+    } catch (error) {
+        console.error("Recitation Error:", error);
+        return {
+            isCorrect: false,
+            score: 0,
+            feedback: "حدث خطأ في تحليل الصوت، حاول مرة أخرى بصوت أوضح.",
+            mistakes: []
+        };
+    }
 };
-
