@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AISummary, RecitationResult } from '../types';
 
 // استخدم المفتاح مباشرة
-const ai = new GoogleGenAI({ apiKey: 'REDACTED_BY_FILTER_REPO' });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
 
 // =======================================
 // توليد تفسير الآيات
